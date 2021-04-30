@@ -18,8 +18,6 @@ public class Pathfinder : MonoBehaviour
     Vector3 downwardBackVector;
     Vector3 downwardBDRVector;  // back diagonal left
 
-    Vector3 frontHitPoint;
-
 
     RaycastHit frontHit;
     RaycastHit FDRHit;
@@ -48,15 +46,19 @@ public class Pathfinder : MonoBehaviour
     static bool touchBack;
     static bool touchBackRight;
 
-    float[] smallerEur;
+    static float[] smallerEur;
     static bool shouldMove;
     static Vector3 aim;
     string[] allObjectlayers = { "Grid", "Wall" };
+    static List<float> heurList = new List<float>();
 
-    static int index;
-    bool firstTime = false;
+    static int index = 0;
+    Vector3 pastPos;
+    static float hCost = 0f;
+    static float fCost = 0f;
 
-    Dictionary<float, Vector3> heuristicPoint = new Dictionary<float, Vector3>();
+    Dictionary<Vector3, float> heuristicToPointDict = new Dictionary<Vector3, float>();
+    Dictionary<Vector3, bool> heuristicAvailableDict = new Dictionary<Vector3, bool>();
 
     // Start is called before the first frame update
     void Start()
@@ -72,19 +74,52 @@ public class Pathfinder : MonoBehaviour
 
 
 
-        CalculateEuristicRays(transform.position, true, allObjectlayers);
+        CalculateEuristicRays(transform.position);
     }
-
 
     /// <summary>
     /// Makes all the rays and calculate the heuristic of each of them.
     /// </summary>
     /// <param name="pos">position of the rays start position</param>
-    /// <param name="shouldMove">allows for calculating without provoking a move from the player</param>
-    /// <param name="layerNames">the layers in which the rays can interact</param>
+    /// <param name=""="iterationNumber">decides which heuristic to chose. 0 = the smallest one</param>
     /// <returns>returns the second closest heuristic after hitting a wall</returns>
-    Vector3 CalculateEuristicRays(Vector3 pos, bool shouldMove, params string[] layerNames)
+    void CalculateEuristicRays(Vector3 pos)
     {
+        SendRays(pos);
+        //if (wallInFront || wallFrontLeft || wallFrontRight || wallRight || wallLeft || wallBack || wallBackLeft || wallBackRight)
+        //{
+        //    index++;
+        //    foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
+        //    {
+        //        print("the key: " + point.Key + " = " + point.Value);
+        //        if (smallerEur[index] == point.Value) { nextPos = point.Key; print("FOUND IT!"); break; }
+        //    }
+        //    foreach (KeyValuePair<Vector3, bool> point in heuristicAvailableDict)
+        //    {
+        //        print("is this Vector3: " + point.Key + " available? " + point.Value);
+        //    }
+        //    if (heuristicAvailableDict.ContainsKey(nextPos))
+        //    {
+        //        print("Contains key?: " + nextPos);
+        //        nextPos = new Vector3(nextPos.x, transform.position.y, nextPos.z);
+        //        CalculateEuristicRays(nextPos, index);
+        //    }
+        //    //for (int i = 0; i < smallerEur.Length; i++)
+        //    //{
+        //    //    print("listcount: " + smallerEur[i] + " nb of times: " + i);
+        //    //}
+        //    Debug.LogError("heuristic dict count: " + heuristicToPointDict.Count + " and the number: " + index + " of the heurList is : " + smallerEur[index] + " with a count of" +
+        //      " : " + smallerEur.Length + " and nextPos is: " + nextPos);
+        //    return;
+        //}
+        //print("smallest heuristic is: " + smallerEur[index]);
+        //MoveTowardsTheSmallestEur(frontEur, FDREur, rightSideEur, FDLEur, leftSideEur, BDLEur, backEur, BDREur, smallerEur[index]);
+        MoveAgent();
+    }
+
+    float SendRays(Vector3 pos)
+    {
+        print("SendRays " + pos);
         float frontEur = 0f;
         float FDREur = 0f;
         float rightSideEur = 0f;
@@ -93,155 +128,297 @@ public class Pathfinder : MonoBehaviour
         float BDLEur = 0f;
         float backEur = 0f;
         float BDREur = 0f;
-
-
+        hCost = 0;      //10 for straight and 14 for diagonals
+        heuristicToPointDict = new Dictionary<Vector3, float>();
+        heuristicAvailableDict = new Dictionary<Vector3, bool>();
 
         //Front Ray
         Ray frontRay = new Ray(pos, downwardFrontVector * multiplier);
-        touchFront = Physics.Raycast(frontRay, out frontHit, LayerMask.GetMask(layerNames));
+        touchFront = Physics.Raycast(frontRay, out frontHit, LayerMask.GetMask(allObjectlayers));
         if (touchFront)
         {
+            wallInFront = false;
             if (frontHit.collider.tag == "Wall")
             {
                 wallInFront = true;
-                print("Front Hit point value in Calculate Ray: " + frontHit.point);
+                heuristicAvailableDict.Add(frontHit.point, false);
                 frontEur = int.MaxValue;
+                print("Touching front wall " + frontHit.point);
             }
             else
             {
-                wallInFront = false;
+                hCost += 10;
                 frontEur = CalculateManhattanValue(frontHit.point);
-                heuristicPoint.Add(frontEur, frontHit.point);
             }
-            //print("Front Man value: " + frontEur);
+            heuristicToPointDict.Add(frontHit.point, frontEur);
             Debug.DrawRay(pos, downwardFrontVector, Color.black, 1f);
         }
 
 
         //Front right diagonal
         Ray FDRray = new Ray(pos, downwardFDRVector * multiplier);
-        touchFrontRight = Physics.Raycast(FDRray, out FDRHit, LayerMask.GetMask(layerNames));
+        touchFrontRight = Physics.Raycast(FDRray, out FDRHit, LayerMask.GetMask(allObjectlayers));
         if (touchFrontRight)
         {
             if (FDRHit.collider.tag == "Wall")
             {
                 wallFrontRight = true;
+                heuristicAvailableDict.Add(FDRHit.point, false);
                 FDREur = int.MaxValue;
             }
             else
             {
-                wallFrontRight = false;
+                hCost += 14;
                 FDREur = CalculateManhattanValue(FDRHit.point);
-                heuristicPoint.Add(FDLEur, FDRHit.point);
+                wallFrontRight = false;
+                //if (!heuristicToPointDict.ContainsKey(FDRHit.point))
+                //{
+                //}
             }
+            heuristicToPointDict.Add(FDRHit.point, FDREur);
             //print("FD Man value: " + FDREur);
             Debug.DrawRay(pos, downwardFDRVector, Color.blue, 1f);
         }
 
         // right Side ray
         Ray rightSideRay = new Ray(pos, downwardSideVector * multiplier);
-        touchRight = Physics.Raycast(rightSideRay, out rightSideHit, LayerMask.GetMask(layerNames));
+        touchRight = Physics.Raycast(rightSideRay, out rightSideHit, LayerMask.GetMask(allObjectlayers));
         if (touchRight)
         {
             if (rightSideHit.collider.tag == "Wall")
             {
                 wallRight = true;
+                heuristicAvailableDict.Add(rightSideHit.point, false);
                 rightSideEur = int.MaxValue;
             }
             else
             {
-                wallRight = false;
+                hCost += 10;
                 rightSideEur = CalculateManhattanValue(rightSideHit.point);
-                heuristicPoint.Add(rightSideEur,rightSideHit.point);
+                wallRight = false;
+                //if (!heuristicToPointDict.ContainsKey(rightSideHit.point))
+                //{
+                //}
             }
-            //print("Side Man value: " + rightSideEur);
+            heuristicToPointDict.Add(rightSideHit.point, rightSideEur);
             Debug.DrawRay(pos, downwardSideVector, Color.red, 1f);
         }
 
         //Front diagonal left
         Ray FDLRay = new Ray(pos, downwardFDLVector * multiplier);
-        touchFrontLeft = Physics.Raycast(FDLRay, out FDLHit, LayerMask.GetMask(layerNames));
+        touchFrontLeft = Physics.Raycast(FDLRay, out FDLHit, LayerMask.GetMask(allObjectlayers));
         if (touchFrontLeft)
         {
             if (FDLHit.collider.tag == "Wall")
             {
                 wallFrontLeft = true;
+                heuristicAvailableDict.Add(FDLHit.point, false);
                 FDLEur = int.MaxValue;
             }
             else
             {
-                wallFrontLeft = false;
+                hCost += 14;
                 FDLEur = CalculateManhattanValue(FDLHit.point);
-                heuristicPoint.Add(FDLEur, FDLHit.point);
+                wallFrontLeft = false;
+                //if (!heuristicToPointDict.ContainsKey(FDLHit.point))
+                //{
+                //}
             }
+            heuristicToPointDict.Add(FDLHit.point, FDLEur);
         }
 
         //Left Side Ray
         Ray leftSideRay = new Ray(pos, downwardLeftSideVector * multiplier);
-        touchLeft = Physics.Raycast(leftSideRay, out leftSideHit, LayerMask.GetMask(layerNames));
+        touchLeft = Physics.Raycast(leftSideRay, out leftSideHit, LayerMask.GetMask(allObjectlayers));
         if (touchLeft)
         {
             if (leftSideHit.collider.tag == "Wall")
             {
                 wallLeft = true;
+                heuristicAvailableDict.Add(leftSideHit.point, false);
+                leftSideEur = int.MaxValue;
             }
-            leftSideEur = CalculateManhattanValue(leftSideHit.point);
+            else
+            {
+                hCost += 10;
+                leftSideEur = CalculateManhattanValue(leftSideHit.point);
+                wallLeft = false;
+                //if (!heuristicToPointDict.ContainsKey(leftSideHit.point))
+                //{
+                //}
+            }
+            heuristicToPointDict.Add(leftSideHit.point, leftSideEur);
         }
 
         //Back diagonal left
         Ray BDLRay = new Ray(pos, downwardBDLVector * multiplier);
-        touchBackLeft = Physics.Raycast(BDLRay, out BDLHit, LayerMask.GetMask(layerNames));
+        touchBackLeft = Physics.Raycast(BDLRay, out BDLHit, LayerMask.GetMask(allObjectlayers));
         if (touchBackLeft)
         {
             if (BDLHit.collider.tag == "Wall")
             {
                 wallBackLeft = true;
+                heuristicAvailableDict.Add(BDLHit.point, false);
+                BDLEur = int.MaxValue;
             }
-            BDLEur = CalculateManhattanValue(BDLHit.point);
+            else
+            {
+                hCost += 14;
+                BDLEur = CalculateManhattanValue(BDLHit.point);
+                wallBackLeft = false;
+                //if (!heuristicToPointDict.ContainsKey(BDLHit.point))
+                //{
+                //}
+            }
+            heuristicToPointDict.Add(BDLHit.point, BDLEur);
         }
 
         //Back Ray
         Ray backRay = new Ray(pos, downwardBackVector * multiplier);
-        touchBack = Physics.Raycast(backRay, out BackHit, LayerMask.GetMask(layerNames));
+        touchBack = Physics.Raycast(backRay, out BackHit, LayerMask.GetMask(allObjectlayers));
         if (touchBack)
         {
             if (BackHit.collider.tag == "Wall")
             {
                 wallBack = true;
+                heuristicAvailableDict.Add(BackHit.point, false);
+                backEur = int.MaxValue;
             }
-            backEur = CalculateManhattanValue(BackHit.point);
+            else
+            {
+                hCost += 10;
+                backEur = CalculateManhattanValue(BackHit.point);
+                wallBack = false;
+                //if (!heuristicToPointDict.ContainsKey(BackHit.point))
+                //{
+                //}
+            }
+            heuristicToPointDict.Add(BackHit.point, backEur);
         }
 
         //Back right diagonal
         Ray BDRray = new Ray(pos, downwardBDRVector * multiplier);
-        touchBackRight = Physics.Raycast(BDRray, out BDRHit, LayerMask.GetMask(layerNames));
+        touchBackRight = Physics.Raycast(BDRray, out BDRHit, LayerMask.GetMask(allObjectlayers));
         if (touchBackRight)
         {
             if (BDRHit.collider.tag == "Wall")
             {
                 wallBackRight = true;
+                heuristicAvailableDict.Add(BDRHit.point, false);
+                BDREur = int.MaxValue;
             }
-            BDREur = CalculateManhattanValue(BDRHit.point);
+            else
+            {
+                hCost += 14;
+                BDREur = CalculateManhattanValue(BDRHit.point);
+                wallBackRight = false;
+            }
+            heuristicToPointDict.Add(BDRHit.point, BDREur);
         }
 
         smallerEur = GetEfficiencyList(frontEur, FDREur, rightSideEur, FDLEur, leftSideEur, BDLEur, backEur, BDREur);
-
-        if (shouldMove)
+        while (smallerEur[index] == int.MaxValue)
         {
-            MoveTowardsTheSmallestEur(frontEur, FDREur, rightSideEur, FDLEur, leftSideEur, BDLEur, backEur, BDREur, smallerEur[0]);
+            index++;
+            if (index > smallerEur.Length) { Debug.LogError("surrounded by walls? "); break; }
         }
-        if (firstTime) { index = 1; } else { index = 0; }
-        if (smallerEur[index] == frontEur) { print("frontEur is closer and index is: " + index); return new Vector3(frontHit.point.x, transform.position.y, frontHit.point.z); }
-        else if (smallerEur[index] == FDREur) { print("fDR is closer"); return new Vector3(FDRHit.point.x, transform.position.y, FDRHit.point.z); }
-        else if (smallerEur[index] == rightSideEur) { print("right is closer"); return new Vector3(rightSideHit.point.x, transform.position.y, rightSideHit.point.z); }
-        else if (smallerEur[index] == FDLEur) { print("fDL is closer"); return new Vector3(FDLHit.point.x, transform.position.y, FDLHit.point.z); }
-        else if (smallerEur[index] == leftSideEur) { print("left is closer"); return new Vector3(leftSideHit.point.x, transform.position.y, leftSideHit.point.z); }
-        else if (smallerEur[index] == BDLEur) { return new Vector3(BDLHit.point.x, transform.position.y, BDLHit.point.z); }
-        else if (smallerEur[index] == backEur) { return new Vector3(BackHit.point.x, transform.position.y, BackHit.point.z); }
-        else return BDRHit.point;
-
+        Dictionary<float, Vector3> fCostDict = new Dictionary<float, Vector3>();
+        List<float> fCostList = new List<float>();
+        for (int i = 0; i < smallerEur.Length; i++)
+        {
+            Vector3 tmpPos = Vector3.zero;
+            fCost = smallerEur[i] + CalculateHCost(smallerEur[i]);
+            print("fCost: " + fCost);
+            foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
+            {
+                if (point.Value == smallerEur[i])
+                {
+                    tmpPos = point.Key;
+                }
+            }
+            fCostList.Add(fCost);
+            if (!fCostDict.ContainsKey(fCost))
+            {
+                fCostDict.Add(fCost, tmpPos);
+            }
+        }
+        float best = heuristicToPointDict[fCostDict[GetEfficiencyList(fCost)[0]]];
+        if (!wallInFront || !wallFrontLeft || !wallFrontRight || !wallRight || !wallLeft || !wallBack || !wallBackLeft || !wallBackRight) { return best; }
+        else
+        {
+            return SendRays(fCostDict[GetEfficiencyList(fCost)[0]]);
+        }
 
     }
+
+    float CalculateHCost(float heurPoint)
+    {
+        Vector3 pos = Vector3.zero;
+        foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
+        {
+            if (point.Value == heurPoint)
+            {
+                pos = point.Key;
+            }
+        }
+        return (transform.position.x - pos.x) + (transform.position.z - pos.z);
+    }
+
+    float extender;
+
+    void MoveAgent()
+    {
+        Vector3 nextPos;
+        foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
+        {
+            //print("the key: " + point.Key + " = " + point.Value + " and the smallest heur is: " + smallerEur[index] + " index nb: " + index);
+            if (smallerEur[index] == point.Value)
+            {
+                nextPos = point.Key; print("FOUND IT! " + nextPos);
+                if (wallInFront)
+                {
+                    print("is wallInFront? " + wallInFront);
+                    extender += 0.2f;
+                    SendRays(new Vector3(nextPos.x + extender, transform.position.y, nextPos.z));
+                    wallInFront = false;
+                }
+                else
+                {
+                    extender = 0;
+                    index = 0;
+                }
+
+                shouldMove = true;
+                Vector3 tmp = new Vector3(nextPos.x, transform.position.y, nextPos.z);
+                aim = tmp;
+            }
+        }
+
+    }
+
+    Vector3 newPos;
+
+    void ExploreSide(Vector3 pos)
+    {
+        float smallestHeur = SendRays(pos);
+        Vector3 tmp = Vector3.zero;
+        int i = 0;
+        do
+        {
+            foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
+            {
+                if (smallestHeur == point.Value)
+                {
+                    print("points explored: " + point.Key);
+                    tmp = new Vector3(point.Key.x, transform.position.y, point.Key.z);
+                }
+            }
+            i++;
+            SendRays(tmp);
+            if (i >= 100) { print("wallFront? " + wallInFront); break; }
+        } while (wallInFront);
+    }
+
 
     float CalculateManhattanValue(Vector3 point)
     {
@@ -255,13 +432,13 @@ public class Pathfinder : MonoBehaviour
     {
         if (IsSmallestEur(frontEur, smallerEur))
         {
-            if (wallInFront)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallInFront)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("GO Front");
             shouldMove = true;
             Vector3 tmp = new Vector3(frontHit.point.x, transform.position.y, frontHit.point.z);
@@ -269,13 +446,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(FDREur, smallerEur))
         {
-            if (wallFrontRight)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallFrontRight)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("GO FDR");
             shouldMove = true;
             Vector3 tmp = new Vector3(FDRHit.point.x, transform.position.y, FDRHit.point.z);
@@ -283,13 +460,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(rightSideEur, smallerEur))
         {
-            if (wallRight)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallRight)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("GO SIDE");
             shouldMove = true;
             Vector3 tmp = new Vector3(rightSideHit.point.x, transform.position.y, rightSideHit.point.z);
@@ -297,13 +474,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(FDLEur, smallerEur))
         {
-            if (wallFrontLeft)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallFrontLeft)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("Go FDL");
             shouldMove = true;
             Vector3 tmp = new Vector3(FDLHit.point.x, transform.position.y, FDLHit.point.z);
@@ -311,13 +488,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(leftSideEur, smallerEur))
         {
-            if (wallLeft)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallLeft)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("Go Left");
             shouldMove = true;
             Vector3 tmp = new Vector3(leftSideHit.point.x, transform.position.y, leftSideHit.point.z);
@@ -325,13 +502,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(BDLEur, smallerEur))
         {
-            if (wallBackLeft)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallBackLeft)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("Go BDL");
             shouldMove = true;
             Vector3 tmp = new Vector3(BDLHit.point.x, transform.position.y, BDLHit.point.z);
@@ -339,13 +516,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(backEur, smallerEur))
         {
-            if (wallBack)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallBack)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("Go back");
             shouldMove = true;
             Vector3 tmp = new Vector3(BackHit.point.x, transform.position.y, BackHit.point.z);
@@ -353,13 +530,13 @@ public class Pathfinder : MonoBehaviour
         }
         else if (IsSmallestEur(BDREur, smallerEur))
         {
-            if (wallBackRight)
-            {
-                shouldMove = false;
-                firstTime = true;
-                AssessEuristics(transform.position);
-                return;
-            }
+            //if (wallBackRight)
+            //{
+            //    shouldMove = false;
+            //    firstTime = true;
+            //    AssessEuristics(transform.position);
+            //    return;
+            //}
             print("Go BDR");
             shouldMove = true;
             Vector3 tmp = new Vector3(BDRHit.point.x, transform.position.y, BDRHit.point.z);
@@ -379,35 +556,8 @@ public class Pathfinder : MonoBehaviour
 
     float[] GetEfficiencyList(params float[] euristics)
     {
-        Dictionary<float, Vector3> dict = new Dictionary<float, Vector3>();
-        foreach (KeyValuePair<float,Vector3> point in heuristicPoint)
-        {
-
-        }
         Array.Sort(euristics);
         return euristics;
-        //try
-        //{
-        //    float front = euristics[0];
-        //    float FDR = euristics[1];
-        //    float rightSide = euristics[2];
-        //    float FDL = euristics[3];
-        //    float leftSide = euristics[4];
-
-        //for (int i = 0; i < euristics.Length; i++)
-        //{
-        //    if(front > euristics[i]) { }
-        //}
-        //if (frontEur <= FDREur && frontEur <= rightSideEur) { return frontEur; }
-        //if (FDREur <= frontEur && FDREur <= rightSideEur) { return FDREur; }
-        //if (rightSideEur <= frontEur && rightSideEur <= FDREur) { return rightSideEur; }
-        //return 0;
-        //}
-        //catch (IndexOutOfRangeException)
-        //{
-        //    Debug.Log("One euristic is not being checked");
-        //    throw;
-        //}
     }
 
     /// <summary>
@@ -415,49 +565,49 @@ public class Pathfinder : MonoBehaviour
     /// until obstacle is not around anymore
     /// </summary>
     /// <param name="playerPos"></param>
-    void AssessEuristics(Vector3 playerPos)
-    {
-        if (firstTime)
-        {
-            shouldMove = false;
-        }
-        else
-        {
-            shouldMove = true;
-            Vector3 tmp = new Vector3(playerPos.x, transform.position.y, playerPos.z);
-            aim = tmp;
-        }
-        // Base case
-        if ((!touchFront || !touchFrontRight || !touchRight || !touchFrontLeft || !touchLeft || !touchBackLeft || !touchBack || !touchBackRight)
-            || (!wallInFront && !wallFrontRight && !wallFrontLeft && !wallRight && !wallLeft && !wallBackLeft && !wallBack && !wallBackRight))
-        {
-            shouldMove = true;
-            Vector3 tmp = new Vector3(playerPos.x, transform.position.y, playerPos.z);
-            aim = tmp;
-            print("Hit the base case with aim of: " + aim);
-            return;
-        }
-        Vector3 newPosition = CalculateEuristicRays(playerPos, false, allObjectlayers);
-        Debug.LogError("Recusrsive position is: " + newPosition);
-        firstTime = false;
-        AssessEuristics(newPosition);
-        //if (wallInFront)
-        //{
-        //}
-        //else if (wallFrontRight) { AssessEuristics(FDRHit.point); }
-        //else if (wallFrontLeft) { AssessEuristics(FDLHit.point); }
-        //else if (wallRight) { AssessEuristics(rightSideHit.point); }
-        //else if (wallLeft) { AssessEuristics(leftSideHit.point); }
-        //else if (wallBackLeft) { AssessEuristics(BDLHit.point); }
-        //else if (wallBack) { AssessEuristics(BackHit.point); }
-        //else if (wallBackRight) { AssessEuristics(BDRHit.point); }
-        //else
-        //{
-        //    print("No wall is being touched");
-        //    return;
-        //}
+    //void AssessEuristics(Vector3 playerPos)
+    //{
+    //    if (firstTime)
+    //    {
+    //        shouldMove = false;
+    //    }
+    //    else
+    //    {
+    //        shouldMove = true;
+    //        Vector3 tmp = new Vector3(playerPos.x, transform.position.y, playerPos.z);
+    //        aim = tmp;
+    //    }
+    //    // Base case
+    //    if ((!touchFront || !touchFrontRight || !touchRight || !touchFrontLeft || !touchLeft || !touchBackLeft || !touchBack || !touchBackRight)
+    //        || (!wallInFront && !wallFrontRight && !wallFrontLeft && !wallRight && !wallLeft && !wallBackLeft && !wallBack && !wallBackRight))
+    //    {
+    //        shouldMove = true;
+    //        Vector3 tmp = new Vector3(playerPos.x, transform.position.y, playerPos.z);
+    //        aim = tmp;
+    //        print("Hit the base case with aim of: " + aim);
+    //        return;
+    //    }
+    //Vector3 newPosition = CalculateEuristicRays(playerPos, 0, allObjectlayers);
+    //Debug.LogError("Recusrsive position is: " + newPosition);
+    //firstTime = false;
+    //AssessEuristics(newPosition);
+    //if (wallInFront)
+    //{
+    //}
+    //else if (wallFrontRight) { AssessEuristics(FDRHit.point); }
+    //else if (wallFrontLeft) { AssessEuristics(FDLHit.point); }
+    //else if (wallRight) { AssessEuristics(rightSideHit.point); }
+    //else if (wallLeft) { AssessEuristics(leftSideHit.point); }
+    //else if (wallBackLeft) { AssessEuristics(BDLHit.point); }
+    //else if (wallBack) { AssessEuristics(BackHit.point); }
+    //else if (wallBackRight) { AssessEuristics(BDRHit.point); }
+    //else
+    //{
+    //    print("No wall is being touched");
+    //    return;
+    //}
 
-    }
+    //}
 
 
     // Update is called once per frame
@@ -472,7 +622,10 @@ public class Pathfinder : MonoBehaviour
             else
             {
                 shouldMove = false;
-                CalculateEuristicRays(transform.position, true, allObjectlayers);
+                if (!wallInFront)
+                {
+                    CalculateEuristicRays(transform.position);
+                }
             }
         }
     }
