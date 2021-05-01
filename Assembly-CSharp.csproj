@@ -54,10 +54,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Assets\Pathfinder.cs" />
-    <Compile Include="Assets\PathFinding.cs" />
-    <Compile Include="Assets\WaypointMaker.cs" />
-    <Compile Include="Assets\Node.cs" />
-    <Compile Include="Assets\Agent.cs" />
+    <Compile Include="Assets\Scripts\PathFinding.cs" />
+    <Compile Include="Assets\Scripts\WaypointMaker.cs" />
+    <Compile Include="Assets\Scripts\Node.cs" />
+    <Compile Include="Assets\Scripts\Agent.cs" />
+    <Compile Include="Assets\Scripts\Item.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

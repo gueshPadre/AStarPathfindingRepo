@@ -11,7 +11,7 @@ public class PathFinding : MonoBehaviour
     public List<Transform> Goals { get { return goals; } set { goals = value; } }
     public bool IsDone { get; set; }
 
-    public event Action MoveToGoal;
+    public event Action MoveToGoal;         // Event to make the player start moving after path has been calculated
 
     private void Awake()
     {
@@ -35,7 +35,6 @@ public class PathFinding : MonoBehaviour
     {
         Node startNode = waypointGraph.GetClosestNode(_startPos);
         Node targetNode = waypointGraph.GetClosestNode(_goal);
-
 
         List<Node> openList = new List<Node>();     // List of the nodes that we need to visit
         HashSet<Node> closedList = new HashSet<Node>();     // List of the nodes we already checked
@@ -85,6 +84,14 @@ public class PathFinding : MonoBehaviour
         if (!IsDone)
         {
             Debug.LogWarning("No Path was found");
+            if (Agent.goalIndex + 1 < goals.Count)
+            {
+                Agent.goalIndex++; 
+            }
+            else
+            {
+                IsDone = true;
+            }
         }
     }
 
@@ -107,7 +114,7 @@ public class PathFinding : MonoBehaviour
         finalPath.Reverse();
         for (int i = 0; i < finalPath.Count; i++)       //add the moving position to the queue
         {
-            Agent.Instance.movingPos.Enqueue(new Vector3(finalPath[i].pos.x,Agent.Instance.transform.position.y, finalPath[i].pos.z));
+            Agent.Instance.movingPosQueue.Enqueue(new Vector3(finalPath[i].pos.x,Agent.Instance.transform.position.y, finalPath[i].pos.z));
         }
 
         waypointGraph.shortestPath = finalPath;
