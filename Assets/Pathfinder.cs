@@ -343,9 +343,10 @@ public class Pathfinder : MonoBehaviour
             }
         }
         float best = heuristicToPointDict[fCostDict[GetEfficiencyList(fCost)[0]]];
-        if (!wallInFront || !wallFrontLeft || !wallFrontRight || !wallRight || !wallLeft || !wallBack || !wallBackLeft || !wallBackRight) { return best; }
+        if (!wallInFront || !wallFrontLeft || !wallFrontRight || !wallRight || !wallLeft || !wallBack || !wallBackLeft || !wallBackRight) { print("not touching any walls"); return best; }
         else
         {
+            print("im touching a wall therefore recalcultate");
             return SendRays(fCostDict[GetEfficiencyList(fCost)[0]]);
         }
 
@@ -369,6 +370,7 @@ public class Pathfinder : MonoBehaviour
     void MoveAgent()
     {
         Vector3 nextPos;
+        float opt;
         foreach (KeyValuePair<Vector3, float> point in heuristicToPointDict)
         {
             //print("the key: " + point.Key + " = " + point.Value + " and the smallest heur is: " + smallerEur[index] + " index nb: " + index);
@@ -379,18 +381,28 @@ public class Pathfinder : MonoBehaviour
                 {
                     print("is wallInFront? " + wallInFront);
                     extender += 0.2f;
-                    SendRays(new Vector3(nextPos.x + extender, transform.position.y, nextPos.z));
                     wallInFront = false;
+                    opt = SendRays(new Vector3(nextPos.x + extender, transform.position.y, nextPos.z));
+                    shouldMove = true;
+                    foreach (KeyValuePair<Vector3,float> heur in heuristicToPointDict)
+                    {
+                        if(opt == heur.Value)
+                        {
+                            nextPos = heur.Key;
+                        }
+                        Vector3 tmp = new Vector3(nextPos.x, transform.position.y, nextPos.z);
+                        aim = tmp;
+                    }
                 }
                 else
                 {
                     extender = 0;
                     index = 0;
+                    shouldMove = true;
+                    Vector3 tmp = new Vector3(nextPos.x, transform.position.y, nextPos.z);
+                    aim = tmp;
                 }
 
-                shouldMove = true;
-                Vector3 tmp = new Vector3(nextPos.x, transform.position.y, nextPos.z);
-                aim = tmp;
             }
         }
 
